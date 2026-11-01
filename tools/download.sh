@@ -1,4 +1,7 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 
 echo aosp branch: $BRANCH
 echo aosp device: $DEVICE
@@ -24,30 +27,47 @@ fi
 echo "-> host arch: $HOST_ARCH"
 echo "-> target arch: $TARGET_ARCH"
 
-URL_CI_ANDROID=https://ci.android.com/builds/latest/branches/${BRANCH}/targets/${TARGET}/view/BUILD_INFO
-RURL_CI_ANDROID=$(curl -Ls -o /dev/null -w %{url_effective} ${URL_CI_ANDROID})
+# /builds/latest/.../BUILD_INFO no longer redirects to a build id.
+VERSION=$(curl -fsSL "https://ci.android.com/builds/branches/${BRANCH}/status.json" | python3 -c '
+import json, sys
+target = sys.argv[1]
+data = json.load(sys.stdin)
+for item in data.get("targets", []):
+    if item.get("name") == target:
+        build_id = str(item.get("last_known_good_build") or "")
+        if build_id and build_id != "0":
+            print(build_id)
+            sys.exit(0)
+        sys.exit(f"no last_known_good_build for {target}")
+sys.exit(f"target not in status.json: {target}")
+' "$TARGET")
+echo "-> build id: ${VERSION}"
 
-VERSION=${RURL_CI_ANDROID%/$TARGET/latest/view/BUILD_INFO}
-VERSION=${VERSION#https://ci.android.com/builds/submitted/}
-
-wget -nv ${RURL_CI_ANDROID%/view/BUILD_INFO}/raw/${DEVICE}-img-$VERSION.zip -O ${DEVICE}-img.zip
+ARTIFACT_BASE="https://ci.android.com/builds/submitted/${VERSION}/${TARGET}/latest/raw"
+wget -nv "${ARTIFACT_BASE}/${DEVICE}-img-${VERSION}.zip" -O "${DEVICE}-img.zip"
 
 if [ "$TARGET_ARCH" = "$HOST_ARCH" ]; then
     FILE_NAME="cvd-host_package.tar.gz"
     echo "-> arch matched: (run $TARGET_ARCH on $HOST_ARCH)), downloading $FILE_NAME..."
-    wget -nv ${RURL_CI_ANDROID%/view/BUILD_INFO}/raw/cvd-host_package.tar.gz -O cvd-host_package.tar.gz
+    wget -nv "${ARTIFACT_BASE}/cvd-host_package.tar.gz" -O cvd-host_package.tar.gz
 elif [ "$TARGET_ARCH" != "x86_64" ] && [ "$HOST_ARCH" = "x86_64" ]; then
     FILE_NAME="cvd-host_package-x86_64.tar.gz"
     echo "->  cross arch detected:  (run $TARGET_ARCH on $HOST_ARCH), downloading $FILE_NAME..."
-    wget -nv ${RURL_CI_ANDROID%/view/BUILD_INFO}/raw/cvd-host_package-x86_64.tar.gz -O cvd-host_package.tar.gz
+    wget -nv "${ARTIFACT_BASE}/cvd-host_package-x86_64.tar.gz" -O cvd-host_package.tar.gz
 else
     echo "-> arch not matched: (not support run $TARGET_ARCH on $HOST_ARCH)"
     exit 1
 fi
 
 mkdir -p $CF_HOME
-tar -xvf cvd-host_package.tar.gz -C $CF_HOME
-unzip ${DEVICE}-img.zip -d $CF_HOME
+tar -xvf cvd-host_package.tar.gz -C "$CF_HOME"
+unzip "${DEVICE}-img.zip" -d "$CF_HOME"
+
+if [ "$TARGET_ARCH" != "$HOST_ARCH" ]; then
+  install -m 0644 \
+    "${TOOLS_DIR}/multi_touchscreen_template.json" \
+    "$CF_HOME/etc/default_input_devices/multi_touchscreen_template.json"
+fi
 
 if [ ! -e /dev/kvm ] || [ "$TARGET_ARCH" != "$HOST_ARCH" ]; then
   echo "disable kvm"

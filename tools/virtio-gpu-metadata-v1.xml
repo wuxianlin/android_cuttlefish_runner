@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<protocol name="virtio_gpu_metadata_v1">
+  <interface name="wp_virtio_gpu_metadata_v1" version="1">
+    <request name="get_surface_metadata">
+      <arg name="id" type="new_id" interface="wp_virtio_gpu_surface_metadata_v1"/>
+      <arg name="surface" type="object" interface="wl_surface"/>
+    </request>
+  </interface>
+  <interface name="wp_virtio_gpu_surface_metadata_v1" version="1">
+    <request name="set_scanout_id">
+      <arg name="scanout_id" type="uint"/>
+    </request>
+  </interface>
+</protocol>

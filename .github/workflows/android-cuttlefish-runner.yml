@@ -94,8 +94,7 @@ jobs:
 
       - name: Start CVD Server
         run: |
-          sudo cloudflared tunnel --url http://localhost:8080 &
-          python tools/proxy.py &
+          sudo cloudflared tunnel --url https://localhost:8443 --no-tls-verify &
 
       - name: Print Logs
         run: |

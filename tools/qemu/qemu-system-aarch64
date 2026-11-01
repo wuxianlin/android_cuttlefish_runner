@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+TOOLS_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)
+INSTANCE=${CUTTLEFISH_INSTANCE:-1}
+: "${CF_HOME:?CF_HOME must point to the extracted Cuttlefish directory}"
+: "${CF_REAL_QEMU:?CF_REAL_QEMU must point to the real qemu-system-aarch64}"
+
+case ${1:-} in
+  -version|--version)
+    exec "${CF_REAL_QEMU}" "$@"
+    ;;
+esac
+
+eval "$("${TOOLS_DIR}/cvd_runtime.py" "${CF_HOME}" "${INSTANCE}")"
+
+exec "${CF_REAL_QEMU}" "$@" \
+  -chardev "socket,path=${CF_INPUT_SOCKET_DIR}/keyboard.sock,id=keyboard0" \
+  -device "vhost-user-input-pci,chardev=keyboard0" \
+  -chardev "socket,path=${CF_INPUT_SOCKET_DIR}/touch_0.sock,id=touchscreen0" \
+  -device "vhost-user-input-pci,chardev=touchscreen0"
