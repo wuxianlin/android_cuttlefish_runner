@@ -22,26 +22,35 @@ if [ -e use_qemu ]; then
   fi
   export CF_REAL_QEMU
 
+  # launch_cvd --daemon returns only after boot, so the bridge must start first.
+  (
+    while true; do
+      if runtime=$("$TOOLS_DIR/cvd_runtime.py" "$CVD_HOME" "$INSTANCE" 2>/dev/null); then
+        eval "$runtime"
+        if [ -S "$CF_FRAME_SOCKET" ]; then
+          "$TOOLS_DIR/cf-vnc-wayland-bridge" \
+            "$CF_FRAME_SOCKET" \
+            "127.0.0.1:$CF_VNC_DISPLAY" \
+            "$CF_DISPLAY_WIDTH" \
+            "$CF_DISPLAY_HEIGHT" || true
+        fi
+      fi
+      sleep 1
+    done
+  ) &
+
   HOME=$PWD ./bin/launch_cvd \
     --vm_manager=qemu_cli \
     --qemu_binary_dir="$TOOLS_DIR/qemu" \
     --gpu_mode=guest_swiftshader \
     --start_webrtc=true \
+    --restart_subprocesses=true \
     -cpus=4 \
     --memory_mb=8192 \
     -enable_sandbox=false \
     --report_anonymous_usage_stats=n \
     --daemon
-
-  eval "$("$TOOLS_DIR/cvd_runtime.py" "$CVD_HOME" "$INSTANCE")"
-  while true; do
-    "$TOOLS_DIR/cf-vnc-wayland-bridge" \
-      "$CF_FRAME_SOCKET" \
-      "127.0.0.1:$CF_VNC_DISPLAY" \
-      "$CF_DISPLAY_WIDTH" \
-      "$CF_DISPLAY_HEIGHT" || true
-    sleep 1
-  done
+  wait
 else
   HOME=$PWD ./bin/launch_cvd \
     -cpus=4 \
